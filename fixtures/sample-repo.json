@@ -1,0 +1,5 @@
+{
+  "name": "sample-repo",
+  "note": "Test fixture for --repo-mode=local. Real parsing comes in stage 2.",
+  "packages": {}
+}
