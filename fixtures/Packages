@@ -1,0 +1,41 @@
+Package: myapp
+Version: 1.0.0
+Architecture: amd64
+Depends: libc6 (>= 2.31), libssl1.1, zlib1g
+Description: My demo app v1
+
+Package: myapp
+Version: 2.0.0
+Architecture: amd64
+Depends: libc6 (>= 2.34), libssl3, libcurl4 | libcurl3, libzstd1
+Description: My demo app v2
+
+Package: libc6
+Version: 2.35-0ubuntu3
+Architecture: amd64
+Depends: libgcc-s1
+Description: GNU C Library
+
+Package: libssl3
+Version: 3.0.2-0ubuntu1.12
+Architecture: amd64
+Depends: libc6 (>= 2.34)
+Description: SSL library
+
+Package: zlib1g
+Version: 1:1.2.11.dfsg-2ubuntu9
+Architecture: amd64
+Depends: libc6 (>= 2.14)
+Description: Compression library
+
+Package: bash
+Version: 5.1-6ubuntu1
+Architecture: amd64
+Depends: base-files (>= 2.1.12ubuntu1), debianutils (>= 2.15)
+Description: GNU Bourne Again SHell
+
+Package: base-files
+Version: 12ubuntu4
+Architecture: amd64
+Depends:
+Description: Debian base system miscellaneous files

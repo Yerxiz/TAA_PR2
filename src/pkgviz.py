@@ -4,6 +4,8 @@ import os
 import re
 import sys
 from urllib.parse import urlparse
+from apt_repo import (RepoError, fetch_repo_content, find_package,
+                      parse_packages)
 
 PROG = "pkgviz"
 TOOL_VERSION = "0.1.0"
@@ -234,6 +236,16 @@ def dump_config(args: argparse.Namespace) -> None:
     print("=====================")
 
 
+def print_dependencies(pkg) -> None:
+    """Печатает прямые зависимости пакета в виде списка."""
+    print(f"Dependencies of {pkg.name} {pkg.version}:")
+    if not pkg.depends:
+        print("  (no dependencies)")
+        return
+    for dep in pkg.depends:
+        print(f"  - {dep}")
+
+
 # ============================================================
 #  Точка входа
 # ============================================================
@@ -243,6 +255,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     validate_cross(args, parser)
     dump_config(args)
+
+    try:
+        content = fetch_repo_content(args.repo, args.repo_mode)
+        packages = parse_packages(content)
+        pkg = find_package(packages, args.package, args.version)
+    except RepoError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print()
+    print_dependencies(pkg)
     return 0
 
 
