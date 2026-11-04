@@ -118,7 +118,7 @@ def validate_filter(value: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG, description="Visualize package dependency graphs.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter    )
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-p", "--package", required=True,
                         type=validate_package,
                         help="Name of the package to analyze."
