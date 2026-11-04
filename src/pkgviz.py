@@ -181,6 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"{PROG} {TOOL_VERSION}",
         help="Show the tool's own version and exit.",
     )
+    parser.add_argument(
+        "--load-order",
+        action="store_true",
+        help="Print the dependency load (installation) order.",
+    )
     return parser
 
 
@@ -302,6 +307,38 @@ def print_graph(graph: dict[str, set[str]], root: str) -> None:
             print(f"  {node} -> (no dependencies)")
 
 
+def get_load_order(graph: dict[str, set[str]], root: str) -> list[str]:
+    """Вычисляет порядок загрузки зависимостей (топологическая сортировка).
+
+    Использует рекурсивный DFS (post-order). Циклы разрываются.
+    """
+    order: list[str] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def dfs(node: str) -> None:
+        if node in visited:
+            return
+        if node in visiting:
+            # Цикл. Мы не можем загрузить A до того, как загружен B,
+            # а B до того, как загружен A. Разрываем цикл, пропуская ребро.
+            return
+
+        visiting.add(node)
+
+        # Рекурсивно обходим зависимости (они должны быть в списке раньше)
+        for dep in sorted(graph.get(node, [])):
+            dfs(dep)
+
+        visiting.remove(node)
+        visited.add(node)
+        # Добавляем в список только после обхода всех зависимостей
+        order.append(node)
+
+    dfs(root)
+    return order
+
+
 # ============================================================
 #  Точка входа
 # ============================================================
@@ -340,6 +377,13 @@ def main(argv: list[str] | None = None) -> int:
 
         # 3. Выводим результат
         print_graph(graph, args.package)
+
+        # 4. Если запрошен порядок загрузки
+        if args.load_order:
+            print(f"\nLoad order for {args.package}:")
+            load_order = get_load_order(graph, args.package)
+            for i, pkg in enumerate(load_order, 1):
+                print(f"  {i:>2}. {pkg}")
 
     except RepoError as exc:
         print(f"error: {exc}", file=sys.stderr)
