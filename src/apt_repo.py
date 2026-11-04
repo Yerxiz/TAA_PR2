@@ -3,6 +3,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+import json
 
 
 class RepoError(Exception):
@@ -160,6 +161,27 @@ def find_package(packages: list[Package], name: str,
         f"version {version!r} of {name!r} not found. "
         f"Available versions: {available}"
     )
+
+
+def load_test_graph(path: str) -> dict[str, list[str]]:
+    """Загружает граф из JSON-файла для --repo-mode test.
+
+    Формат: {"A": ["B", "C"], "B": ["D"], ...}
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError as exc:
+        raise RepoError(f"cannot read test graph {path!r}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise RepoError(f"invalid JSON in test graph {path!r}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise RepoError("test graph root must be a JSON object")
+    for k, v in data.items():
+        if not isinstance(v, list):
+            raise RepoError(f"test graph entry {k!r} must be a list")
+    return data
 
 
 # ============================================================

@@ -5,7 +5,7 @@ import re
 import sys
 from urllib.parse import urlparse
 from apt_repo import (RepoError, fetch_repo_content, find_package,
-                      parse_packages)
+                      parse_packages, load_test_graph)
 
 PROG = "pkgviz"
 TOOL_VERSION = "0.1.0"
@@ -246,6 +246,62 @@ def print_dependencies(pkg) -> None:
         print(f"  - {dep}")
 
 
+def bfs_recursive(
+        queue: list[str],
+        repo_map: dict[str, list[str]],
+        graph: dict[str, set[str]],
+        visited: set[str],
+        filter_sub: str | None,
+) -> None:
+    """Рекурсивный поиск в ширину для построения транзитивного графа.
+
+    queue — узлы текущего уровня.
+    visited — уже обработанные узлы (защита от циклов).
+    """
+    if not queue:
+        return
+
+    next_queue: list[str] = []
+
+    for node in queue:
+        if node in visited:
+            continue
+        visited.add(node)
+
+        # Если имя узла содержит подстроку фильтра — пропускаем его целиком
+        if filter_sub and filter_sub in node:
+            continue
+
+        if node not in graph:
+            graph[node] = set()
+
+        for dep in repo_map.get(node, []):
+            # Если имя зависимости содержит подстроку — не добавляем ребро
+            if filter_sub and filter_sub in dep:
+                continue
+
+            graph[node].add(dep)
+
+            # В BFS добавляем в очередь следующего уровня, если ещё не видели
+            if dep not in visited:
+                next_queue.append(dep)
+
+    # Рекурсивно переходим на следующий уровень
+    bfs_recursive(next_queue, repo_map, graph, visited, filter_sub)
+
+
+def print_graph(graph: dict[str, set[str]], root: str) -> None:
+    """Печатает граф зависимостей в формате adjacency list."""
+    print(f"\nDependency graph for {root}:")
+    # Сортируем для детерминированного вывода
+    for node in sorted(graph.keys()):
+        deps = sorted(graph[node])
+        if deps:
+            print(f"  {node} -> {', '.join(deps)}")
+        else:
+            print(f"  {node} -> (no dependencies)")
+
+
 # ============================================================
 #  Точка входа
 # ============================================================
@@ -257,15 +313,38 @@ def main(argv: list[str] | None = None) -> int:
     dump_config(args)
 
     try:
-        content = fetch_repo_content(args.repo, args.repo_mode)
-        packages = parse_packages(content)
-        pkg = find_package(packages, args.package, args.version)
+        # 1. Получаем данные репозитория
+        if args.repo_mode == "test":
+            repo_map = load_test_graph(args.repo)
+            # Проверим, что корневой пакет вообще есть в тестовом графе
+            if args.package not in repo_map:
+                raise RepoError(f"package {args.package!r} not found in test graph")
+        else:
+            content = fetch_repo_content(args.repo, args.repo_mode)
+            packages = parse_packages(content)
+
+            # Ищем нужную версию корневого пакета (для валидации)
+            find_package(packages, args.package, args.version)
+
+            # Строим плоскую карту: имя -> список зависимостей.
+            # Берём первое вхождение (в реальных Packages новые версии идут первыми)
+            repo_map = {}
+            for p in packages:
+                if p.name not in repo_map:
+                    repo_map[p.name] = p.depends
+
+        # 2. Строим граф через рекурсивный BFS
+        graph: dict[str, set[str]] = {}
+        visited: set[str] = set()
+        bfs_recursive([args.package], repo_map, graph, visited, args.filter)
+
+        # 3. Выводим результат
+        print_graph(graph, args.package)
+
     except RepoError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print()
-    print_dependencies(pkg)
     return 0
 
 
