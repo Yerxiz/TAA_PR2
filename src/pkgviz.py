@@ -6,6 +6,8 @@ import sys
 from urllib.parse import urlparse
 from apt_repo import (RepoError, fetch_repo_content, find_package,
                       parse_packages, load_test_graph)
+import subprocess
+import shutil
 
 PROG = "pkgviz"
 TOOL_VERSION = "0.1.0"
@@ -340,6 +342,80 @@ def get_load_order(graph: dict[str, set[str]], root: str) -> list[str]:
 
 
 # ============================================================
+#  Визуализация Graphviz и ASCII-дерево
+# ============================================================
+
+def generate_dot(graph: dict[str, set[str]], title: str) -> str:
+    """Генерирует текстовое представление графа на языке DOT."""
+    lines = [
+        "digraph Dependencies {",
+        '    rankdir="LR";',
+        f'    label="{title}";',
+        '    labelloc="t";',
+        '    node [shape=box, style="rounded,filled", fillcolor="#e8f0fe", fontname="Arial"];',
+        '    edge [color="#5f6368"];'
+    ]
+    for node in sorted(graph.keys()):
+        for dep in sorted(graph[node]):
+            lines.append(f'    "{node}" -> "{dep}";')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def save_graph_image(dot_code: str, output_file: str) -> None:
+    """Сохраняет граф в изображение через системный Graphviz."""
+    if not shutil.which("dot"):
+        print("warning: 'dot' (Graphviz) not found in PATH. Image not generated.", file=sys.stderr)
+        print("         Install Graphviz from https://graphviz.org/download/", file=sys.stderr)
+        return
+
+    # Определяем формат по расширению
+    ext = os.path.splitext(output_file)[1].lstrip(".").lower()
+    if ext == "jpg": ext = "jpeg"
+
+    try:
+        subprocess.run(
+            ["dot", f"-T{ext}", "-o", output_file],
+            input=dot_code.encode("utf-8"),
+            check=True,
+            capture_output=True
+        )
+        print(f"Graph image saved to: {output_file}")
+    except subprocess.CalledProcessError as exc:
+        print(f"error: Graphviz failed to render image: {exc.stderr.decode()}", file=sys.stderr)
+
+
+def print_ascii_tree(graph: dict[str, set[str]], root: str) -> None:
+    """Печатает граф в виде ASCII-дерева."""
+    print(f"\nDependency Tree for {root}:")
+    visited = set()
+
+    def _walk(node: str, prefix: str, is_last: bool) -> None:
+        connector = "└── " if is_last else "├── "
+
+        if node in visited:
+            print(f"{prefix}{connector}{node} (cycle)")
+            return
+
+        print(f"{prefix}{connector}{node}")
+        visited.add(node)
+
+        children = sorted(graph.get(node, []))
+        for i, child in enumerate(children):
+            is_last_child = (i == len(children) - 1)
+            next_prefix = prefix + ("    " if is_last else "│   ")
+            _walk(child, next_prefix, is_last_child)
+
+    # Корневой узел печатаем без веток
+    print(root)
+    visited.add(root)
+    children = sorted(graph.get(root, []))
+    for i, child in enumerate(children):
+        is_last = (i == len(children) - 1)
+        _walk(child, "", is_last)
+
+
+# ============================================================
 #  Точка входа
 # ============================================================
 
@@ -360,15 +436,18 @@ def main(argv: list[str] | None = None) -> int:
             content = fetch_repo_content(args.repo, args.repo_mode)
             packages = parse_packages(content)
 
-            # Ищем нужную версию корневого пакета (для валидации)
-            find_package(packages, args.package, args.version)
+            # 1. Находим конкретный объект пакета нужной версии
+            root_pkg = find_package(packages, args.package, args.version)
 
-            # Строим плоскую карту: имя -> список зависимостей.
-            # Берём первое вхождение (в реальных Packages новые версии идут первыми)
+            # 2. Строим плоскую карту
             repo_map = {}
             for p in packages:
                 if p.name not in repo_map:
                     repo_map[p.name] = p.depends
+
+            # 3. Принудительно обновляем зависимости корневого пакета
+            #    на те, что были найдены для конкретной версии
+            repo_map[root_pkg.name] = root_pkg.depends
 
         # 2. Строим граф через рекурсивный BFS
         graph: dict[str, set[str]] = {}
@@ -378,7 +457,21 @@ def main(argv: list[str] | None = None) -> int:
         # 3. Выводим результат
         print_graph(graph, args.package)
 
-        # 4. Если запрошен порядок загрузки
+        # 4. Генерация Graphviz
+        dot_code = generate_dot(graph, f"Dependencies of {args.package}")
+
+        # Сохраняем исходник DOT (полезно для отладки)
+        with open("deps.dot", "w", encoding="utf-8") as f:
+            f.write(dot_code)
+
+        # Рендерим в SVG/PNG (если возможно)
+        save_graph_image(dot_code, args.output)
+
+        # Вывод ASCII-дерева (если не отключено)
+        if args.ascii_tree != "off":
+            print_ascii_tree(graph, args.package)
+
+        # 5. Если запрошен порядок загрузки
         if args.load_order:
             print(f"\nLoad order for {args.package}:")
             load_order = get_load_order(graph, args.package)
