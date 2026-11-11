@@ -4,7 +4,7 @@ chcp 65001 >nul
 setlocal
 
 REM Определяем корень проекта (папка, где лежит этот скрипт)
-set "ROOT=%~dp0"
+set "ROOT=%~dp0.."
 cd /d "%ROOT%"
 
 REM Проверяем, что Python доступен (можно заменить на python, если py не работает)
@@ -47,7 +47,7 @@ echo ==========================================================
 echo === ЭТАП 4: Порядок загрузки (Топологическая сортировка) ===
 echo --- Пример 6: Порядок установки для графа с циклом ---
 echo Ввод: py src\pkgviz.py --package A --repo fixtures\test_graph.json --repo-mode test --load-order --ascii-tree off
-%PY% src\pkgviz.py --package A --repo fixtures\test_graph.json --repo-mode test --load-order --ascii-tree off
+%PY% src\pkgviz.py --package A --repo .\fixtures\test_graph.json --repo-mode test --load-order --ascii-tree off
 echo.
 
 echo ==========================================================
