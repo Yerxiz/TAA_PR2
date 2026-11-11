@@ -14,13 +14,9 @@ class RepoError(Exception):
 class Package:
     name: str
     version: str
-    depends: list[str]  # прямые зависимости (только имена)
-    fields: dict[str, str]  # все поля записи (для будущих этапов)
+    depends: list[str]
+    fields: dict[str, str]
 
-
-# ============================================================
-#  Загрузка содержимого репозитория
-# ============================================================
 
 def fetch_repo_content(repo: str, mode: str) -> str:
     """Возвращает текст файла Packages.
@@ -43,7 +39,8 @@ def _read_local(path: str) -> str:
         with open(path, "rb") as fh:
             raw = fh.read()
     except OSError as exc:
-        raise RepoError(f"cannot read repository file {path!r}: {exc}") from exc
+        raise RepoError(f"cannot read repository file {path!r}: {exc}")\
+            from exc
     return _decode(raw, path)
 
 
@@ -62,16 +59,14 @@ def _decode(raw: bytes, source: str) -> str:
         try:
             raw = gzip.decompress(raw)
         except OSError as exc:
-            raise RepoError(f"failed to decompress {source!r}: {exc}") from exc
+            raise RepoError(f"failed to decompress {source!r}: {exc}")\
+                from exc
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RepoError(f"repository {source!r} is not valid UTF-8: {exc}") from exc
+        raise RepoError(f"repository {source!r} is not valid UTF-8: {exc}")\
+            from exc
 
-
-# ============================================================
-#  Разбор поля Depends
-# ============================================================
 
 def parse_depends(value: str) -> list[str]:
     """Из строки 'a (>= 1.0), b, c | d' извлекает ['a', 'b', 'c']."""
@@ -80,19 +75,13 @@ def parse_depends(value: str) -> list[str]:
         part = part.strip()
         if not part:
             continue
-        # отбрасываем альтернативы через '|', берём первую
         first_alt = part.split("|")[0].strip()
-        # отбрасываем ограничение версии: 'name (>= 1.0)' -> 'name'
         name = re.split(r"\s+", first_alt, maxsplit=1)[0]
-        name = name.rstrip(":")  # редкий случай 'name:any'
+        name = name.rstrip(":")
         if name:
             result.append(name)
     return result
 
-
-# ============================================================
-#  Разбор файла Packages на записи
-# ============================================================
 
 def parse_packages(text: str) -> list[Package]:
     """Возвращает список всех пакетов из текста Packages."""
@@ -102,7 +91,6 @@ def parse_packages(text: str) -> list[Package]:
 
     for raw_line in text.splitlines():
         if not raw_line.strip():
-            # пустая строка = конец текущей записи
             if current:
                 records.append(current)
                 current = {}
@@ -110,12 +98,11 @@ def parse_packages(text: str) -> list[Package]:
             continue
 
         if raw_line[0] in (" ", "\t") and last_key:
-            # продолжение многострочного поля — нам не критично, но соберём
             current[last_key] += "\n" + raw_line.strip()
             continue
 
         if ":" not in raw_line:
-            continue  # мусорная строка — пропускаем
+            continue
 
         key, _, val = raw_line.partition(":")
         key = key.strip()
@@ -130,21 +117,16 @@ def parse_packages(text: str) -> list[Package]:
         name = rec.get("Package")
         version = rec.get("Version")
         if not name or not version:
-            continue  # без имени/версии запись бесполезна
+            continue
         depends = parse_depends(rec.get("Depends", ""))
         packages.append(Package(name=name, version=version,
                                 depends=depends, fields=rec))
     return packages
 
 
-# ============================================================
-#  Поиск нужного пакета
-# ============================================================
-
 def find_package(packages: list[Package], name: str,
                  version: str) -> Package:
     """Ищет пакет по имени и версии.
-
     Если version == 'latest', возвращает первое найденное совпадение
     по имени (в реальных файлах Packages обычно идёт от новых к старым).
     """
@@ -172,9 +154,11 @@ def load_test_graph(path: str) -> dict[str, list[str]]:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
     except OSError as exc:
-        raise RepoError(f"cannot read test graph {path!r}: {exc}") from exc
+        raise RepoError(f"cannot read test graph {path!r}: {exc}")\
+            from exc
     except json.JSONDecodeError as exc:
-        raise RepoError(f"invalid JSON in test graph {path!r}: {exc}") from exc
+        raise RepoError(f"invalid JSON in test graph {path!r}: {exc}")\
+            from exc
 
     if not isinstance(data, dict):
         raise RepoError("test graph root must be a JSON object")
@@ -183,10 +167,6 @@ def load_test_graph(path: str) -> dict[str, list[str]]:
             raise RepoError(f"test graph entry {k!r} must be a list")
     return data
 
-
-# ============================================================
-#  Встроенный тестовый репозиторий (для --repo-mode=test)
-# ============================================================
 
 _TEST_PACKAGES = """\
 Package: myapp
