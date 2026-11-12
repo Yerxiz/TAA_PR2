@@ -261,12 +261,10 @@ def bfs_recursive(
 
     next_queue: list[str] = []
 
-    # Обрабатываем весь текущий уровень
     for node in queue:
         _process_bfs_node(node, repo_map, graph, visited,
                           filter_sub, next_queue)
 
-    # Переходим на следующий уровень
     bfs_recursive(next_queue, repo_map, graph, visited, filter_sub)
 
 
