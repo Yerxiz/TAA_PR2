@@ -39,7 +39,7 @@ def _read_local(path: str) -> str:
         with open(path, "rb") as fh:
             raw = fh.read()
     except OSError as exc:
-        raise RepoError(f"cannot read repository file {path!r}: {exc}")\
+        raise RepoError(f"cannot read repository file {path!r}: {exc}") \
             from exc
     return _decode(raw, path)
 
@@ -59,12 +59,12 @@ def _decode(raw: bytes, source: str) -> str:
         try:
             raw = gzip.decompress(raw)
         except OSError as exc:
-            raise RepoError(f"failed to decompress {source!r}: {exc}")\
+            raise RepoError(f"failed to decompress {source!r}: {exc}") \
                 from exc
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RepoError(f"repository {source!r} is not valid UTF-8: {exc}")\
+        raise RepoError(f"repository {source!r} is not valid UTF-8: {exc}") \
             from exc
 
 
@@ -83,8 +83,8 @@ def parse_depends(value: str) -> list[str]:
     return result
 
 
-def parse_packages(text: str) -> list[Package]:
-    """Возвращает список всех пакетов из текста Packages."""
+def _parse_records(text: str) -> list[dict[str, str]]:
+    """Разбивает текст Packages на список словарей (записей)."""
     records: list[dict[str, str]] = []
     current: dict[str, str] = {}
     last_key: str | None = None
@@ -105,22 +105,36 @@ def parse_packages(text: str) -> list[Package]:
             continue
 
         key, _, val = raw_line.partition(":")
-        key = key.strip()
-        current[key] = val.strip()
-        last_key = key
+        current[key.strip()] = val.strip()
+        last_key = key.strip()
 
     if current:
         records.append(current)
+    return records
 
+
+def _parse_package_record(rec: dict[str, str]) -> Package | None:
+    """Создает объект Package из одной записи. Возвращает None, если данных не хватает."""
+    name = rec.get("Package")
+    version = rec.get("Version")
+    if not name or not version:
+        return None
+    return Package(
+        name=name,
+        version=version,
+        depends=parse_depends(rec.get("Depends", "")),
+        fields=rec
+    )
+
+
+def parse_packages(text: str) -> list[Package]:
+    """Возвращает список всех пакетов из текста Packages."""
+    records = _parse_records(text)
     packages: list[Package] = []
     for rec in records:
-        name = rec.get("Package")
-        version = rec.get("Version")
-        if not name or not version:
-            continue
-        depends = parse_depends(rec.get("Depends", ""))
-        packages.append(Package(name=name, version=version,
-                                depends=depends, fields=rec))
+        pkg = _parse_package_record(rec)
+        if pkg is not None:
+            packages.append(pkg)
     return packages
 
 
@@ -154,10 +168,10 @@ def load_test_graph(path: str) -> dict[str, list[str]]:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
     except OSError as exc:
-        raise RepoError(f"cannot read test graph {path!r}: {exc}")\
+        raise RepoError(f"cannot read test graph {path!r}: {exc}") \
             from exc
     except json.JSONDecodeError as exc:
-        raise RepoError(f"invalid JSON in test graph {path!r}: {exc}")\
+        raise RepoError(f"invalid JSON in test graph {path!r}: {exc}") \
             from exc
 
     if not isinstance(data, dict):

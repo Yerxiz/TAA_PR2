@@ -102,13 +102,14 @@ def validate_tree_mode(value: str) -> str:
 def validate_filter(value: str) -> str:
     """Проверяет подстроку для фильтрации пакетов."""
     const_number = 256
+    const2 = 0x20
     if not value:
         raise argparse.ArgumentTypeError("filter substring must not be empty")
     if len(value) > const_number:
         raise argparse.ArgumentTypeError(
             "filter substring is too long (max 256 characters)"
         )
-    if any(ord(c) < 0x20 for c in value):
+    if any(ord(c) < const2 for c in value):
         raise argparse.ArgumentTypeError(
             "filter substring must not contain control characters"
         )
@@ -215,41 +216,57 @@ def print_dependencies(pkg) -> None:
         print(f"  - {dep}")
 
 
+def _matches_filter(name: str, filter_sub: str | None) -> bool:
+    """Проверяет, содержит ли имя пакета подстроку фильтра."""
+    return bool(filter_sub and filter_sub in name)
+
+
+def _process_bfs_node(
+        node: str,
+        repo_map: dict[str, list[str]],
+        graph: dict[str, set[str]],
+        visited: set[str],
+        filter_sub: str | None,
+        next_queue: list[str]) -> None:
+    """Обрабатывает один узел на текущем уровне BFS."""
+    if node in visited:
+        return
+    visited.add(node)
+
+    if _matches_filter(node, filter_sub):
+        return
+
+    if node not in graph:
+        graph[node] = set()
+
+    for dep in repo_map.get(node, []):
+        if _matches_filter(dep, filter_sub):
+            continue
+
+        graph[node].add(dep)
+
+        if dep not in visited:
+            next_queue.append(dep)
+
+
 def bfs_recursive(
         queue: list[str],
         repo_map: dict[str, list[str]],
         graph: dict[str, set[str]],
         visited: set[str],
         filter_sub: str | None) -> None:
-    """Рекурсивный поиск в ширину для построения транзитивного графа.
-    queue — узлы текущего уровня.
-    visited — уже обработанные узлы (защита от циклов).
-    """
+    """Рекурсивный поиск в ширину для построения транзитивного графа."""
     if not queue:
         return
 
     next_queue: list[str] = []
 
+    # Обрабатываем весь текущий уровень
     for node in queue:
-        if node in visited:
-            continue
-        visited.add(node)
+        _process_bfs_node(node, repo_map, graph, visited,
+                          filter_sub, next_queue)
 
-        if filter_sub and filter_sub in node:
-            continue
-
-        if node not in graph:
-            graph[node] = set()
-
-        for dep in repo_map.get(node, []):
-            if filter_sub and filter_sub in dep:
-                continue
-
-            graph[node].add(dep)
-
-            if dep not in visited:
-                next_queue.append(dep)
-
+    # Переходим на следующий уровень
     bfs_recursive(next_queue, repo_map, graph, visited, filter_sub)
 
 
