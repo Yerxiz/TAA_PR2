@@ -114,7 +114,8 @@ def _parse_records(text: str) -> list[dict[str, str]]:
 
 
 def _parse_package_record(rec: dict[str, str]) -> Package | None:
-    """Создает объект Package из одной записи. Возвращает None, если данных не хватает."""
+    """Создает объект Package из одной записи. Возвращает None,
+     если данных не хватает."""
     name = rec.get("Package")
     version = rec.get("Version")
     if not name or not version:
